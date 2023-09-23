@@ -2,5 +2,7 @@ github.com/hybridgroup/mjpeg v0.0.0-20140228234708-4680f319790e/go.mod h1:eagM80
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/yam8511/go-onnxruntime v1.0.0 h1:gqDzfgeQhpwrnc8q8+xu4WT3k02I/vU39DgjreSBHQ4=
 github.com/yam8511/go-onnxruntime v1.0.0/go.mod h1:wBTsA2enRpmt0lWb90yhsQMXIMB7Ok+mYRgeJo7zpyQ=
+github.com/yam8511/go-onnxruntime v1.0.1 h1:tpOhp+LfISuLlj2Ng8tkjoR6bMKYB4po0KekxkCTyms=
+github.com/yam8511/go-onnxruntime v1.0.1/go.mod h1:wBTsA2enRpmt0lWb90yhsQMXIMB7Ok+mYRgeJo7zpyQ=
 gocv.io/x/gocv v0.34.0 h1:lx180sKUAMzox3+gH65wLu2mZSJk9iy8BVXI4kBoymM=
 gocv.io/x/gocv v0.34.0/go.mod h1:oc6FvfYqfBp99p+yOEzs9tbYF9gOrAQSeL/dyIPefJU=

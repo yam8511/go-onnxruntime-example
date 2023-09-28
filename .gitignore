@@ -1,2 +1,4 @@
-bus_result.jpg
 run*
+go-onnxruntime/
+go.work
+go.work.sum

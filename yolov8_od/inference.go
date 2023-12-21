@@ -150,7 +150,7 @@ func (sess *Session_OD) process_output(output []float32, threshold float32) (
 	// fmt.Printf("output0.Shape: %v\n", output0.Shape)
 	size := int(output0.Shape[2])
 	// fmt.Printf("size: %v\n", size)
-	nameSize := len(sess.names)
+	nameSize := int(output0.Shape[1])
 	// fmt.Printf("nameSize: %v\n", nameSize)
 	boxes = make([]image.Rectangle, 0, size)
 	scores = make([]float32, 0, size)
@@ -163,9 +163,7 @@ func (sess *Session_OD) process_output(output []float32, threshold float32) (
 		w := output[2*size+index]
 		h := output[3*size+index]
 		class_id, prob := 0, float32(0.0)
-		out := []float32{xc, yc, w, h}
-		for col := 0; col < nameSize; col++ {
-			out = append(out, output[8400*(col+4)+index])
+		for col := 0; col < (nameSize - 4); col++ {
 			if output[8400*(col+4)+index] > prob {
 				prob = output[8400*(col+4)+index]
 				class_id = col

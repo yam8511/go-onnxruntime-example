@@ -31,3 +31,16 @@ go build -v -o run_cls.exe ./yolov8_cls
 # Linux
 ./run_cls.exe
 ```
+
+## YOLOv8 Segmentation
+
+- [YOLOv8](https://docs.ultralytics.com/tasks/segment/)
+
+```shell
+go build -v -o run_seg.exe ./yolov8_seg
+
+# Windows
+./run_seg.exe -lib your/onnxruntime.dll
+# Linux
+./run_seg.exe
+```

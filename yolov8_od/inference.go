@@ -20,7 +20,7 @@ type Session_OD struct {
 }
 
 func NewSession_OD(ortSDK *ort.ORT_SDK, onnxFile, namesFile string, useGPU bool) (*Session_OD, error) {
-	sess, err := ort.NewSessionWithONNX(ortSDK, onnxFile, true)
+	sess, err := ort.NewSessionWithONNX(ortSDK, onnxFile, useGPU)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,8 @@ func NewSession_OD(ortSDK *ort.ORT_SDK, onnxFile, namesFile string, useGPU bool)
 
 func (sess *Session_OD) predict(inputFile string, threshold float32) (
 	[]image.Rectangle,
-	[]float32, []int, error,
+	[]float32, []int,
+	time.Duration, error,
 ) {
 	img := gocv.IMRead(inputFile, gocv.IMReadColor)
 	defer img.Close()
@@ -58,14 +59,14 @@ func (sess *Session_OD) predict(inputFile string, threshold float32) (
 	now := time.Now()
 	input, xFactor, yFactor, err := sess.prepare_input(img.Clone())
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, 0, err
 	}
 	preP = time.Since(now)
 
 	now = time.Now()
 	output, err := sess.run_model(input)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, 0, err
 	}
 	inferP = time.Since(now)
 
@@ -80,13 +81,13 @@ func (sess *Session_OD) predict(inputFile string, threshold float32) (
 	)
 
 	if len(boxes) == 0 {
-		return boxes, scores, classIds, nil
+		return boxes, scores, classIds, inferP, nil
 	}
 
 	sess.drawBox(&img, xFactor, yFactor, boxes, scores, classIds)
 	gocv.IMWrite("result.jpg", img)
 
-	return boxes, scores, classIds, nil
+	return boxes, scores, classIds, inferP, nil
 }
 
 func (sess *Session_OD) prepare_input(img gocv.Mat) ([]float32, float32, float32, error) {

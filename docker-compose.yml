@@ -1,0 +1,19 @@
+version: '3'
+
+
+services:
+  gogo:
+    image: gocv/opencv:4.8.1-gpu-cuda-11.2.2
+    tty: true
+    command: bash
+    working_dir: /work
+    volumes:
+      - .:/work
+      - /usr/local/onnxruntime:/usr/local/onnxruntime
+    environment:
+      - LD_LIBRARY_PATH=/usr/local/onnxruntime/lib
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]

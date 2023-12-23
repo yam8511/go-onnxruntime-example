@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"time"
 
 	ort "github.com/yam8511/go-onnxruntime"
 )
@@ -43,10 +44,34 @@ func main() {
 	}
 	defer sess.release()
 
-	boxes, scores, classIds, err := sess.predict(*input, float32(threshold))
+	boxes, scores, classIds, _, err := sess.predict(*input, float32(threshold))
 	if err != nil {
 		log.Println("推理失敗: ", err)
 		return
 	}
 	fmt.Printf("boxes: %+v, scores: %+v, classIds %+v\n", boxes, scores, classIds)
+
+	t := time.After(time.Second * 6)
+	var d time.Duration
+	var count float64
+
+	for {
+		select {
+		case <-t:
+			fmt.Println("count =", count, "cost =", d.Seconds(), "FPS = ", count/d.Seconds())
+			return
+		default:
+		}
+		boxes, scores, classIds, dur, err := sess.predict(*input, float32(threshold))
+		if err != nil {
+			log.Println("推理失敗: ", err)
+			return
+		}
+		d += dur
+		count++
+		_ = boxes
+		_ = scores
+		_ = classIds
+		// fmt.Printf("boxes: %+v, scores: %+v, classIds %+v\n", boxes, scores, classIds)
+	}
 }

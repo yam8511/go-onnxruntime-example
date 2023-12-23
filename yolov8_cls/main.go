@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"os/signal"
 	"runtime"
+	"syscall"
 
 	ort "github.com/yam8511/go-onnxruntime"
 )
@@ -43,10 +46,18 @@ func main() {
 	}
 	defer sess.release()
 
-	label, confidence, err := sess.predict(*input, float32(threshold))
-	if err != nil {
-		log.Println("推理失敗: ", err)
-		return
+	sig, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	for {
+		select {
+		case <-sig.Done():
+			return
+		default:
+		}
+		label, confidence, err := sess.predict(*input, float32(threshold))
+		if err != nil {
+			log.Println("推理失敗: ", err)
+			return
+		}
+		fmt.Printf("label: %v, confidence: %v\n", label, confidence)
 	}
-	fmt.Printf("label: %v, confidence: %v\n", label, confidence)
 }

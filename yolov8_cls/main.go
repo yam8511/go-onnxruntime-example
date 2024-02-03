@@ -43,10 +43,13 @@ func main() {
 	}
 	defer sess.release()
 
-	label, confidence, err := sess.predict(*input, float32(threshold))
-	if err != nil {
-		log.Println("推理失敗: ", err)
-		return
+	for i := 0; i < 5; i++ {
+		img, label, confidence, err := sess.predict_file(*input, float32(threshold))
+		if err != nil {
+			log.Println("inference failed:", err)
+			return
+		}
+		img.Close()
+		fmt.Printf("label: %v, confidence: %v\n", label, confidence)
 	}
-	fmt.Printf("label: %v, confidence: %v\n", label, confidence)
 }

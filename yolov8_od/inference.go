@@ -5,22 +5,32 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
 
-	ort "github.com/yam8511/go-onnxruntime"
+	"go-onnxruntime-example/pkg/gocv"
+	"go-onnxruntime-example/pkg/utils"
 
-	"gocv.io/x/gocv"
+	ort "github.com/yam8511/go-onnxruntime"
 )
+
+type DetectObject struct {
+	ID    int
+	Label string
+	Score float32
+	Box   image.Rectangle
+}
 
 type Session_OD struct {
 	session *ort.Session
 	names   []string
+	colors  []color.RGBA
 }
 
 func NewSession_OD(ortSDK *ort.ORT_SDK, onnxFile, namesFile string, useGPU bool) (*Session_OD, error) {
-	sess, err := ort.NewSessionWithONNX(ortSDK, onnxFile, true)
+	sess, err := ort.NewSessionWithONNX(ortSDK, onnxFile, useGPU)
 	if err != nil {
 		return nil, err
 	}
@@ -41,36 +51,52 @@ func NewSession_OD(ortSDK *ort.ORT_SDK, onnxFile, namesFile string, useGPU bool)
 		names = append(names, v)
 	}
 
+	colors := []color.RGBA{}
+	if len(names) > 0 {
+		rng := rand.New(rand.NewSource(time.Now().UnixMilli()))
+		for range names {
+			colors = append(colors, color.RGBA{uint8(rng.Intn(255)), uint8(rng.Intn(255)), uint8(rng.Intn(255)), 255})
+		}
+	}
+
 	return &Session_OD{
 		session: sess,
 		names:   names,
+		colors:  colors,
 	}, nil
 }
 
-func (sess *Session_OD) predict(inputFile string, threshold float32) (
-	[]image.Rectangle,
-	[]float32, []int, error,
+func (sess *Session_OD) predict_file(inputFile string, threshold float32) (
+	gocv.Mat, []DetectObject, error,
 ) {
 	img := gocv.IMRead(inputFile, gocv.IMReadColor)
-	defer img.Close()
+	objs, err := sess.predict(img, threshold)
+	if err != nil {
+		img.Close()
+	}
+	return img, objs, err
+}
 
+func (sess *Session_OD) predict(img gocv.Mat, threshold float32) (
+	[]DetectObject, error,
+) {
 	var preP, inferP, postP time.Duration
 	now := time.Now()
 	input, xFactor, yFactor, err := sess.prepare_input(img.Clone())
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	preP = time.Since(now)
 
 	now = time.Now()
 	output, err := sess.run_model(input)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	inferP = time.Since(now)
 
 	now = time.Now()
-	boxes, scores, classIds := sess.process_output(output, threshold)
+	objs := sess.process_output(output, threshold, xFactor, yFactor)
 	postP = time.Since(now)
 
 	fmt.Printf(
@@ -79,14 +105,11 @@ func (sess *Session_OD) predict(inputFile string, threshold float32) (
 		preP+inferP+postP,
 	)
 
-	if len(boxes) == 0 {
-		return boxes, scores, classIds, nil
+	if len(objs) == 0 {
+		return objs, nil
 	}
 
-	sess.drawBox(&img, xFactor, yFactor, boxes, scores, classIds)
-	gocv.IMWrite("result.jpg", img)
-
-	return boxes, scores, classIds, nil
+	return objs, nil
 }
 
 func (sess *Session_OD) prepare_input(img gocv.Mat) ([]float32, float32, float32, error) {
@@ -138,10 +161,8 @@ func (sess *Session_OD) run_model(input []float32) ([]float32, error) {
 	return outputTensor.GetData(), nil
 }
 
-func (sess *Session_OD) process_output(output []float32, threshold float32) (
-	boxes []image.Rectangle,
-	scores []float32,
-	classIds []int,
+func (sess *Session_OD) process_output(output []float32, threshold, xFactor, yFactor float32) (
+	objs []DetectObject,
 ) {
 	output0, ok := sess.session.Output("output0")
 	if !ok {
@@ -150,135 +171,72 @@ func (sess *Session_OD) process_output(output []float32, threshold float32) (
 	// fmt.Printf("output0.Shape: %v\n", output0.Shape)
 	size := int(output0.Shape[2])
 	// fmt.Printf("size: %v\n", size)
-	nameSize := len(sess.names)
+	nameSize := int(output0.Shape[1])
 	// fmt.Printf("nameSize: %v\n", nameSize)
-	boxes = make([]image.Rectangle, 0, size)
-	scores = make([]float32, 0, size)
-	classIds = make([]int, 0, size)
+	boxes := make([]image.Rectangle, 0, size)
+	scores := make([]float32, 0, size)
+	classIds := make([]int, 0, size)
 
-	// boxes := [][]interface{}{}
 	for index := 0; index < size; index++ {
-		xc := output[index]
-		yc := output[size+index]
-		w := output[2*size+index]
-		h := output[3*size+index]
 		class_id, prob := 0, float32(0.0)
-		out := []float32{xc, yc, w, h}
-		for col := 0; col < nameSize; col++ {
-			out = append(out, output[8400*(col+4)+index])
-			if output[8400*(col+4)+index] > prob {
-				prob = output[8400*(col+4)+index]
+		for col := 0; col < (nameSize - 4); col++ {
+			if output[size*(col+4)+index] > prob {
+				prob = output[size*(col+4)+index]
 				class_id = col
 			}
 		}
-		// fmt.Println(index, "==>", out)
+
 		if prob < threshold {
 			continue
 		}
-		// label := yolo_classes[class_id]
-		x1 := xc - w/2
-		y1 := yc - h/2
-		x2 := xc + w/2
-		y2 := yc + h/2
-		// boxes = append(boxes, []interface{}{float64(x1), float64(y1), float64(x2), float64(y2), label, prob})
-		box := image.Rect(
-			int(math.Round(float64(x1))),
-			int(math.Round(float64(y1))),
-			int(math.Round(float64(x2))),
-			int(math.Round(float64(y2))),
-		)
-		boxes = append(boxes, box)
+
+		xc := output[0*size+index]
+		yc := output[1*size+index]
+		w := output[2*size+index]
+		h := output[3*size+index]
+
+		x1 := math.Round(float64((xc - w*0.5) * xFactor))
+		y1 := math.Round(float64((yc - h*0.5) * yFactor))
+		x2 := math.Round(float64((xc + w*0.5) * xFactor))
+		y2 := math.Round(float64((yc + h*0.5) * yFactor))
+
+		boxes = append(boxes, image.Rect(int(x1), int(y1), int(x2), int(y2)))
 		scores = append(scores, prob)
 		classIds = append(classIds, class_id)
 	}
 
+	objs = []DetectObject{}
 	if len(boxes) == 0 {
 		return
 	}
 
 	indices := gocv.NMSBoxes(boxes, scores, threshold, 0.5)
-	tmp_boxes := make([]image.Rectangle, 0, len(indices))
-	tmp_scores := make([]float32, 0, len(indices))
-	tmp_classIds := make([]int, 0, len(indices))
 	for _, idx := range indices {
-		tmp_boxes = append(tmp_boxes, boxes[idx])
-		tmp_scores = append(tmp_scores, scores[idx])
-		tmp_classIds = append(tmp_classIds, classIds[idx])
+		objs = append(objs, DetectObject{
+			ID:    classIds[idx],
+			Label: sess.names[classIds[idx]],
+			Score: scores[idx],
+			Box:   boxes[idx],
+		})
 	}
-	boxes = tmp_boxes
-	scores = tmp_scores
-	classIds = tmp_classIds
 
 	return
 }
 
 func (sess *Session_OD) release() { sess.session.Release() }
 
-func (sess *Session_OD) drawBox(
-	img *gocv.Mat, xFactor, yFactor float32,
-	boxes []image.Rectangle,
-	scores []float32,
-	classIds []int,
+func (sess *Session_OD) draw(
+	img *gocv.Mat,
+	objs []DetectObject,
 ) {
-	for idx, box := range boxes {
-		// if idx == 0 {
-		// 	continue
-		// }
-		// box := boxes[idx]
-		// fmt.Printf("######################: %v\n", idx)
-		// fmt.Printf("x1 = %v, y1 = %v\n", box.Min.X, box.Min.Y)
-		// fmt.Printf("x2 = %v, y2 = %v\n", box.Max.X, box.Max.Y)
-		// fmt.Printf("class id: %v\n", classIds[idx])
-		// box := boxes[idx]
-		box = image.Rect(
-			int(math.Round(float64(box.Min.X)*float64(xFactor))),
-			int(math.Round(float64(box.Min.Y)*float64(yFactor))),
-			int(math.Round(float64(box.Max.X)*float64(xFactor))),
-			int(math.Round(float64(box.Max.Y)*float64(yFactor))),
-		)
-		sess.draw_bounding_box(
+	for _, obj := range objs {
+		utils.DrawBox(
 			img,
-			sess.names[classIds[idx]],
-			scores[idx],
-			box,
-			color.RGBA{255, 0, 0, 0},
+			obj.Label,
+			obj.Score,
+			obj.Box,
+			sess.colors[obj.ID],
 			0, 0, 0,
 		)
-		// fmt.Println("==>", idx, ":", sess.names[classIds[idx]], scores[idx])
 	}
-}
-
-func (sess *Session_OD) draw_bounding_box(
-	img *gocv.Mat,
-	name string,
-	confidence float32,
-	rect image.Rectangle,
-	_color color.RGBA,
-	fontScale float64,
-	thickness int,
-	fontFace gocv.HersheyFont,
-	// mask: "np.ndarray | None" = None,
-) {
-	if fontScale == 0 {
-		fontScale = 1
-	}
-	if thickness == 0 {
-		thickness = 3
-	}
-
-	if fontFace == 0 {
-		fontFace = gocv.FontHersheyComplex
-	}
-	label := fmt.Sprintf("%s (%.2f)%%", name, confidence*100)
-	labelSize := gocv.GetTextSize(label, fontFace, fontScale, thickness)
-	_x1 := rect.Min.X
-	_y1 := rect.Min.Y
-	_x2 := _x1 + labelSize.X
-	_y2 := _y1 - labelSize.Y
-	// 畫框框
-	gocv.Rectangle(img, rect, _color, thickness)
-	// 畫文字的背景
-	gocv.RectangleWithParams(img, image.Rect(_x1, _y1, _x2, _y2), _color, thickness, gocv.Filled, 0)
-	// 畫文字
-	gocv.PutText(img, label, rect.Min, fontFace, fontScale, color.RGBA{255, 255, 255, 0}, thickness)
 }

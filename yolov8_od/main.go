@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"os/signal"
 	"runtime"
+	"syscall"
+
+	"go-onnxruntime-example/pkg/gocv"
 
 	ort "github.com/yam8511/go-onnxruntime"
 )
@@ -43,10 +48,21 @@ func main() {
 	}
 	defer sess.release()
 
-	boxes, scores, classIds, err := sess.predict(*input, float32(threshold))
-	if err != nil {
-		log.Println("推理失敗: ", err)
-		return
+	sig, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	for i := 0; i < 5; i++ {
+		select {
+		case <-sig.Done():
+			return
+		default:
+		}
+		img, objs, err := sess.predict_file(*input, float32(threshold))
+		if err != nil {
+			log.Println("inference failed:", err)
+			return
+		}
+		sess.draw(&img, objs)
+		gocv.IMWrite("result_od.jpg", img)
+		img.Close()
+		fmt.Printf("detect %d objects. and saved to result_od.jpg\n", len(objs))
 	}
-	fmt.Printf("boxes: %+v, scores: %+v, classIds %+v\n", boxes, scores, classIds)
 }

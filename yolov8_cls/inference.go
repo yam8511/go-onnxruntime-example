@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	ort "github.com/yam8511/go-onnxruntime"
+	"go-onnxruntime-example/pkg/gocv"
 
-	"gocv.io/x/gocv"
+	ort "github.com/yam8511/go-onnxruntime"
 )
 
 type Session_CLS struct {
@@ -46,10 +46,18 @@ func NewSession_CLS(ortSDK *ort.ORT_SDK, onnxFile, namesFile string, useGPU bool
 	}, nil
 }
 
-func (sess *Session_CLS) predict(inputFile string, threshold float32) (string, float32, error) {
+func (sess *Session_CLS) predict_file(inputFile string, threshold float32) (
+	gocv.Mat, string, float32, error,
+) {
 	img := gocv.IMRead(inputFile, gocv.IMReadColor)
-	defer img.Close()
+	label, score, err := sess.predict(img, threshold)
+	if err != nil {
+		img.Close()
+	}
+	return img, label, score, err
+}
 
+func (sess *Session_CLS) predict(img gocv.Mat, threshold float32) (string, float32, error) {
 	var preP, inferP, postP time.Duration
 	now := time.Now()
 	input, err := sess.prepare_input(img.Clone())

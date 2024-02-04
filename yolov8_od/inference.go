@@ -119,7 +119,6 @@ func (sess *Session_OD) prepare_input(img gocv.Mat) ([]float32, float32, float32
 	// fmt.Printf("input0: %v\n", input0)
 	imgSize := image.Pt(int(input0.Shape[2]), int(input0.Shape[3]))
 	img_width, img_height := img.Cols(), img.Rows()
-	gocv.Resize(img, &img, imgSize, 0, 0, gocv.InterpolationDefault)
 
 	ratio := 1.0 / 255
 	mean := gocv.NewScalar(0, 0, 0, 0)

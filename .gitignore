@@ -4,3 +4,4 @@ run_*
 go-onnxruntime/
 go.work
 go.work.sum
+onnxruntime-*

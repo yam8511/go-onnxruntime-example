@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"math"
 	"time"
 
 	"go-onnxruntime-example/pkg/gocv"
+	"go-onnxruntime-example/pkg/utils"
 
 	ort "github.com/yam8511/go-onnxruntime"
 )
@@ -19,7 +19,8 @@ type PoseObject struct {
 }
 
 type Keypoint struct {
-	X, Y, Score float32
+	X, Y  int
+	Score float32
 }
 
 type Session_Pose struct {
@@ -67,7 +68,7 @@ func (sess *Session_Pose) predict(img gocv.Mat, thresholdPerson, thresholdPose f
 	inferP = time.Since(now)
 
 	now = time.Now()
-	objs := sess.process_output(output, thresholdPerson, thresholdPose, xFactor, yFactor)
+	objs := sess.process_output(img, output, thresholdPerson, thresholdPose, xFactor, yFactor)
 	postP = time.Since(now)
 
 	fmt.Printf(
@@ -131,7 +132,7 @@ func (sess *Session_Pose) run_model(input []float32) ([]float32, error) {
 	return outputTensor.GetData(), nil
 }
 
-func (sess *Session_Pose) process_output(output []float32, thresholdPerson, thresholdPose, xFactor, yFactor float32) (
+func (sess *Session_Pose) process_output(img gocv.Mat, output []float32, thresholdPerson, thresholdPose, xFactor, yFactor float32) (
 	objs []PoseObject,
 ) {
 	output0, ok := sess.session.Output("output0")
@@ -140,6 +141,9 @@ func (sess *Session_Pose) process_output(output []float32, thresholdPerson, thre
 	}
 
 	size := int(output0.Shape[2]) // 8400
+	imageWidth := img.Cols()
+	imageHeight := img.Rows()
+
 	boxes := make([]image.Rectangle, 0, size)
 	scores := make([]float32, 0, size)
 	keypoints := make([][17]Keypoint, 0, size)
@@ -157,8 +161,8 @@ func (sess *Session_Pose) process_output(output []float32, thresholdPerson, thre
 				kps[i] = Keypoint{-1, -1, kp_score}
 				continue
 			}
-			kp_x := output[(5+i*3)*size+index] * xFactor
-			kp_y := output[(6+i*3)*size+index] * yFactor
+			kp_x := utils.NormalizePoint(output[(5+i*3)*size+index]*xFactor, imageWidth)
+			kp_y := utils.NormalizePoint(output[(6+i*3)*size+index]*yFactor, imageHeight)
 			kps[i] = Keypoint{kp_x, kp_y, kp_score}
 		}
 
@@ -167,12 +171,12 @@ func (sess *Session_Pose) process_output(output []float32, thresholdPerson, thre
 		w := output[2*size+index]
 		h := output[3*size+index]
 
-		x1 := math.Round(float64((xc - w*0.5) * xFactor))
-		y1 := math.Round(float64((yc - h*0.5) * yFactor))
-		x2 := math.Round(float64((xc + w*0.5) * xFactor))
-		y2 := math.Round(float64((yc + h*0.5) * yFactor))
+		x1 := utils.NormalizePoint((xc-w*0.5)*xFactor, imageWidth)
+		y1 := utils.NormalizePoint((yc-h*0.5)*yFactor, imageHeight)
+		x2 := utils.NormalizePoint((xc+w*0.5)*xFactor, imageWidth)
+		y2 := utils.NormalizePoint((yc+h*0.5)*yFactor, imageHeight)
 
-		boxes = append(boxes, image.Rect(int(x1), int(y1), int(x2), int(y2)))
+		boxes = append(boxes, image.Rect(x1, y1, x2, y2))
 		scores = append(scores, score)
 		keypoints = append(keypoints, kps)
 	}
@@ -233,10 +237,10 @@ func (sess *Session_Pose) draw_body(
 	}
 
 	for i := 5; i < 13; i++ {
-		gocv.Circle(img, image.Pt(int(kps[i].X), int(kps[i].Y)), radius, color.RGBA{200, 0, 200, 0}, -1)
+		gocv.Circle(img, image.Pt(kps[i].X, kps[i].Y), radius, color.RGBA{200, 0, 200, 0}, -1)
 	}
 	for i := 11; i < 17; i++ {
-		gocv.Circle(img, image.Pt(int(kps[i].X), int(kps[i].Y)), radius, color.RGBA{0, 200, 200, 0}, -1)
+		gocv.Circle(img, image.Pt(kps[i].X, kps[i].Y), radius, color.RGBA{0, 200, 200, 0}, -1)
 	}
 
 	kpset := []struct {
@@ -291,7 +295,7 @@ func (sess *Session_Pose) draw_body(
 				if kp.X < 0 || kp.Y < 0 {
 					continue
 				}
-				kpt := image.Pt(int(kp.X), int(kp.Y))
+				kpt := image.Pt(kp.X, kp.Y)
 				pv.Append(kpt)
 			}
 			pts.Append(pv)

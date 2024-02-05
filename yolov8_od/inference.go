@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"math"
 	"math/rand"
 	"os"
 	"strings"
@@ -96,7 +95,7 @@ func (sess *Session_OD) predict(img gocv.Mat, threshold float32) (
 	inferP = time.Since(now)
 
 	now = time.Now()
-	objs := sess.process_output(output, threshold, xFactor, yFactor)
+	objs := sess.process_output(img, output, threshold, xFactor, yFactor)
 	postP = time.Since(now)
 
 	fmt.Printf(
@@ -160,7 +159,7 @@ func (sess *Session_OD) run_model(input []float32) ([]float32, error) {
 	return outputTensor.GetData(), nil
 }
 
-func (sess *Session_OD) process_output(output []float32, threshold, xFactor, yFactor float32) (
+func (sess *Session_OD) process_output(img gocv.Mat, output []float32, threshold, xFactor, yFactor float32) (
 	objs []DetectObject,
 ) {
 	output0, ok := sess.session.Output("output0")
@@ -172,6 +171,9 @@ func (sess *Session_OD) process_output(output []float32, threshold, xFactor, yFa
 	// fmt.Printf("size: %v\n", size)
 	nameSize := int(output0.Shape[1])
 	// fmt.Printf("nameSize: %v\n", nameSize)
+	imageWidth := img.Cols()
+	imageHeight := img.Rows()
+
 	boxes := make([]image.Rectangle, 0, size)
 	scores := make([]float32, 0, size)
 	classIds := make([]int, 0, size)
@@ -194,12 +196,12 @@ func (sess *Session_OD) process_output(output []float32, threshold, xFactor, yFa
 		w := output[2*size+index]
 		h := output[3*size+index]
 
-		x1 := math.Round(float64((xc - w*0.5) * xFactor))
-		y1 := math.Round(float64((yc - h*0.5) * yFactor))
-		x2 := math.Round(float64((xc + w*0.5) * xFactor))
-		y2 := math.Round(float64((yc + h*0.5) * yFactor))
+		x1 := utils.NormalizePoint((xc-w*0.5)*xFactor, imageWidth)
+		y1 := utils.NormalizePoint((yc-h*0.5)*yFactor, imageHeight)
+		x2 := utils.NormalizePoint((xc+w*0.5)*xFactor, imageWidth)
+		y2 := utils.NormalizePoint((yc+h*0.5)*yFactor, imageHeight)
 
-		boxes = append(boxes, image.Rect(int(x1), int(y1), int(x2), int(y2)))
+		boxes = append(boxes, image.Rect(x1, y1, x2, y2))
 		scores = append(scores, prob)
 		classIds = append(classIds, class_id)
 	}

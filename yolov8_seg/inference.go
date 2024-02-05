@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"math"
 	"math/rand"
 	"os"
 	"strings"
@@ -213,6 +212,8 @@ func (sess *Session_SEG) process_output(_output0, output1, img *gocv.Mat, xFacto
 	maskSize := sizes_1[0]           // 32
 	maskHeight := sizes_1[1]         // 160
 	nameSize := totalSize - maskSize // 116 - 32
+	imageWidth := img.Cols()
+	imageHeight := img.Rows()
 
 	boxes := make([]image.Rectangle, 0, rows)
 	scores := make([]float32, 0, rows)
@@ -238,12 +239,12 @@ func (sess *Session_SEG) process_output(_output0, output1, img *gocv.Mat, xFacto
 			w := row.GetFloatAt(0, 2)
 			h := row.GetFloatAt(0, 3)
 
-			x1 := math.Round(float64((xc - w*0.5) * xFactor))
-			y1 := math.Round(float64((yc - h*0.5) * yFactor))
-			x2 := math.Round(float64((xc + w*0.5) * xFactor))
-			y2 := math.Round(float64((yc + h*0.5) * yFactor))
+			x1 := utils.NormalizePoint((xc-w*0.5)*xFactor, imageWidth)
+			y1 := utils.NormalizePoint((yc-h*0.5)*yFactor, imageHeight)
+			x2 := utils.NormalizePoint((xc+w*0.5)*xFactor, imageWidth)
+			y2 := utils.NormalizePoint((yc+h*0.5)*yFactor, imageHeight)
 
-			boxes = append(boxes, image.Rect(int(x1), int(y1), int(x2), int(y2)))
+			boxes = append(boxes, image.Rect(x1, y1, x2, y2))
 			scores = append(scores, maxScore)
 			classIds = append(classIds, maxLoc.X)
 			originIdx = append(originIdx, index)
@@ -256,8 +257,6 @@ func (sess *Session_SEG) process_output(_output0, output1, img *gocv.Mat, xFacto
 
 	indices := gocv.NMSBoxes(boxes, scores, accu_thresh, 0.5)
 
-	imageWidth := img.Cols()
-	imageHeight := img.Rows()
 	output1_reshape := output1.Reshape(output1.Channels(), maskSize) // [32 160 160] => [32 25600]
 	for _, idx := range indices {
 		originIndex := originIdx[idx]
@@ -276,6 +275,7 @@ func (sess *Session_SEG) process_output(_output0, output1, img *gocv.Mat, xFacto
 			defer mask_reshape.Close()
 
 			gocv.Resize(mask_reshape, &mask_reshape, image.Pt(imageWidth, imageHeight), 0, 0, gocv.InterpolationDefault)
+
 			mask_region := mask_reshape.Region(box)
 			defer mask_region.Close()
 

@@ -47,7 +47,12 @@ func DrawLabel(
 	if fontFace == 0 {
 		fontFace = gocv.FontHersheyComplex
 	}
-	label := fmt.Sprintf("%s (%.2f%%)", name, confidence*100)
+	var label string
+	if name == "" {
+		label = fmt.Sprintf("%.2f%%", confidence*100)
+	} else {
+		label = fmt.Sprintf("%s (%.2f%%)", name, confidence*100)
+	}
 	labelSize := gocv.GetTextSize(label, fontFace, fontScale, thickness)
 	padding := 16
 	border := padding / 2

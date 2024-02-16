@@ -5,10 +5,10 @@ import (
 	"image"
 	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"go-onnxruntime-example/pkg/gocv"
+	"go-onnxruntime-example/pkg/utils"
 
 	ort "github.com/yam8511/go-onnxruntime"
 )
@@ -18,27 +18,18 @@ type Session_CLS struct {
 	names   []string
 }
 
-func NewSession_CLS(ortSDK *ort.ORT_SDK, onnxFile, namesFile string, useGPU bool) (*Session_CLS, error) {
+func NewSession_CLS(ortSDK *ort.ORT_SDK, onnxFile string, useGPU bool) (*Session_CLS, error) {
 	sess, err := ort.NewSessionWithONNX(ortSDK, onnxFile, useGPU)
 	if err != nil {
 		return nil, err
 	}
 
-	b, err := os.ReadFile(namesFile)
+	_names, err := sess.Metadata("names")
 	if err != nil {
 		sess.Release()
 		return nil, err
 	}
-
-	names := []string{}
-	lines := strings.Split(string(b), "\n")
-	for _, v := range lines {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			continue
-		}
-		names = append(names, v)
-	}
+	names := utils.MetadataToNames(_names)
 
 	return &Session_CLS{
 		session: sess,
@@ -49,7 +40,14 @@ func NewSession_CLS(ortSDK *ort.ORT_SDK, onnxFile, namesFile string, useGPU bool
 func (sess *Session_CLS) predict_file(inputFile string, threshold float32) (
 	gocv.Mat, string, float32, error,
 ) {
-	img := gocv.IMRead(inputFile, gocv.IMReadColor)
+	b, err := os.ReadFile(inputFile)
+	if err != nil {
+		return gocv.Mat{}, "", 0, err
+	}
+	img, err := gocv.IMDecode(b, gocv.IMReadColor)
+	if err != nil {
+		return gocv.Mat{}, "", 0, err
+	}
 	label, score, err := sess.predict(img, threshold)
 	if err != nil {
 		img.Close()

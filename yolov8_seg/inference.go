@@ -6,7 +6,6 @@ import (
 	"image/color"
 	"math/rand"
 	"os"
-	"strings"
 	"time"
 
 	"go-onnxruntime-example/pkg/gocv"
@@ -31,27 +30,18 @@ type Session_SEG struct {
 	colors  []color.RGBA
 }
 
-func NewSession_SEG(ortSDK *ort.ORT_SDK, onnxFile, namesFile string, useGPU bool) (*Session_SEG, error) {
+func NewSession_SEG(ortSDK *ort.ORT_SDK, onnxFile string, useGPU bool) (*Session_SEG, error) {
 	sess, err := ort.NewSessionWithONNX(ortSDK, onnxFile, useGPU)
 	if err != nil {
 		return nil, err
 	}
 
-	b, err := os.ReadFile(namesFile)
+	_names, err := sess.Metadata("names")
 	if err != nil {
 		sess.Release()
 		return nil, err
 	}
-
-	names := []string{}
-	lines := strings.Split(string(b), "\n")
-	for _, v := range lines {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			continue
-		}
-		names = append(names, v)
-	}
+	names := utils.MetadataToNames(_names)
 
 	colors := []color.RGBA{}
 	if len(names) > 0 {
@@ -71,7 +61,14 @@ func NewSession_SEG(ortSDK *ort.ORT_SDK, onnxFile, namesFile string, useGPU bool
 func (sess *Session_SEG) predict_file(inputFile string, threshold float32) (
 	gocv.Mat, []SegmentObject, error,
 ) {
-	img := gocv.IMRead(inputFile, gocv.IMReadColor)
+	b, err := os.ReadFile(inputFile)
+	if err != nil {
+		return gocv.Mat{}, nil, err
+	}
+	img, err := gocv.IMDecode(b, gocv.IMReadColor)
+	if err != nil {
+		return gocv.Mat{}, nil, err
+	}
 	objs, err := sess.predict(img, threshold)
 	if err != nil {
 		img.Close()
@@ -258,25 +255,24 @@ func (sess *Session_SEG) process_output(_output0, output1, img *gocv.Mat, xFacto
 	indices := gocv.NMSBoxes(boxes, scores, accu_thresh, 0.5)
 
 	output1_reshape := output1.Reshape(output1.Channels(), maskSize) // [32 160 160] => [32 25600]
+	defer output1_reshape.Close()
 	for _, idx := range indices {
 		originIndex := originIdx[idx]
 		box := boxes[idx]
-		mask := func() []image.Point {
+		func() {
 			row := output0.RowRange(originIndex, originIndex+1) // [8400 116] => [1 116]
-			defer row.Close()
-
-			col := row.ColRange(nameSize, totalSize) // [1 116] => [1 32]
-			defer col.Close()
+			col := row.ColRange(nameSize, totalSize)            // [1 116] => [1 32]
+			row.Close()
 
 			mask := col.MultiplyMatrix(output1_reshape)
-			defer mask.Close()
+			col.Close()
 
 			mask_reshape := mask.Reshape(mask.Channels(), maskHeight)
-			defer mask_reshape.Close()
 
 			gocv.Resize(mask_reshape, &mask_reshape, image.Pt(imageWidth, imageHeight), 0, 0, gocv.InterpolationDefault)
 
 			mask_region := mask_reshape.Region(box)
+			mask_reshape.Close()
 			defer mask_region.Close()
 
 			gocv.Threshold(mask_region, &mask_region, 1, 255, gocv.ThresholdBinary)
@@ -321,17 +317,16 @@ func (sess *Session_SEG) process_output(_output0, output1, img *gocv.Mat, xFacto
 				pts[i].Y += box.Min.Y
 			}
 
-			return pts
+			// return pts
+			obj := SegmentObject{
+				ID:    classIds[idx],
+				Label: sess.names[classIds[idx]],
+				Score: scores[idx],
+				Box:   box,
+				Mask:  pts,
+			}
+			objs = append(objs, obj)
 		}()
-
-		obj := SegmentObject{
-			ID:    classIds[idx],
-			Label: sess.names[classIds[idx]],
-			Score: scores[idx],
-			Box:   box,
-			Mask:  mask,
-		}
-		objs = append(objs, obj)
 	}
 
 	return

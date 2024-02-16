@@ -19,7 +19,6 @@ func main() {
 	useGPU := flag.Bool("gpu", true, "inference using CUDA")
 	input := flag.String("input", "bus.jpg", "inference input image")
 	onnxFile := flag.String("onnx", "yolov8n-cls.onnx", "inference onnx model")
-	nameFile := flag.String("names", "names_cls.txt", "inference names.txt")
 	flag.Float64Var(&threshold, "conf", 0.0, "inference confidence threshold")
 	flag.Parse()
 
@@ -36,7 +35,7 @@ func main() {
 
 	log.Println("onnxruntime version " + ortSDK.GetVersionString())
 
-	sess, err := NewSession_CLS(ortSDK, *onnxFile, *nameFile, *useGPU)
+	sess, err := NewSession_CLS(ortSDK, *onnxFile, *useGPU)
 	if err != nil {
 		log.Println("建立分類 Session 失敗: ", err)
 		return

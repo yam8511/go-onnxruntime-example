@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"os"
 	"time"
 
 	"go-onnxruntime-example/pkg/gocv"
@@ -41,7 +42,14 @@ func NewSession_Pose(ortSDK *ort.ORT_SDK, onnxFile string, useGPU bool) (*Sessio
 func (sess *Session_Pose) predict_file(inputFile string, thresholdPerson, thresholdPose float32) (
 	gocv.Mat, []PoseObject, error,
 ) {
-	img := gocv.IMRead(inputFile, gocv.IMReadColor)
+	b, err := os.ReadFile(inputFile)
+	if err != nil {
+		return gocv.Mat{}, nil, err
+	}
+	img, err := gocv.IMDecode(b, gocv.IMReadColor)
+	if err != nil {
+		return gocv.Mat{}, nil, err
+	}
 	objs, err := sess.predict(img, thresholdPerson, thresholdPose)
 	if err != nil {
 		img.Close()

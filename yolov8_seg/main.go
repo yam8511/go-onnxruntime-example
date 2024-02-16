@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"os/signal"
 	"runtime"
+	"syscall"
 
 	"go-onnxruntime-example/pkg/gocv"
 
@@ -21,7 +24,6 @@ func main() {
 	useGPU := flag.Bool("gpu", true, "inference using CUDA")
 	input := flag.String("input", "bus.jpg", "inference input image")
 	onnxFile := flag.String("onnx", "yolov8n-seg.onnx", "inference onnx model")
-	nameFile := flag.String("names", "names_seg.txt", "inference names.txt")
 	flag.Float64Var(&threshold, "conf", 0.7, "inference confidence threshold")
 	flag.Parse()
 
@@ -38,14 +40,20 @@ func main() {
 
 	log.Println("onnxruntime version " + ortSDK.GetVersionString())
 
-	sess, err := NewSession_SEG(ortSDK, *onnxFile, *nameFile, *useGPU)
+	sess, err := NewSession_SEG(ortSDK, *onnxFile, *useGPU)
 	if err != nil {
 		log.Println("建立實例分割 Session 失敗: ", err)
 		return
 	}
 	defer sess.release()
 
+	sig, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	for i := 0; i < 5; i++ {
+		select {
+		case <-sig.Done():
+			return
+		default:
+		}
 		img, objs, err := sess.predict_file(*input, float32(threshold))
 		if err != nil {
 			log.Println("inference failed:", err)

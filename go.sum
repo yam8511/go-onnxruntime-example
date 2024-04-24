@@ -1,4 +1,2 @@
-github.com/yam8511/go-onnxruntime v1.1.0 h1:i6QYsVQDQ827qG6BoiMZQWCItsRl6r6o8NMjWzD4Rkg=
-github.com/yam8511/go-onnxruntime v1.1.0/go.mod h1:wBTsA2enRpmt0lWb90yhsQMXIMB7Ok+mYRgeJo7zpyQ=
-github.com/yam8511/go-onnxruntime v1.2.0 h1:D9Oy1n1abuJlAyFUK34DkOnicO5mLSDe1MqpY+Akzbo=
-github.com/yam8511/go-onnxruntime v1.2.0/go.mod h1:wBTsA2enRpmt0lWb90yhsQMXIMB7Ok+mYRgeJo7zpyQ=
+github.com/yam8511/go-onnxruntime v1.3.0 h1:Qa1D13FOTz4hWVh1FreepL0qftlO/jU6veyiVE67Fvw=
+github.com/yam8511/go-onnxruntime v1.3.0/go.mod h1:wBTsA2enRpmt0lWb90yhsQMXIMB7Ok+mYRgeJo7zpyQ=

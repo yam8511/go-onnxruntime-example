@@ -3,7 +3,7 @@
 ## Package
 
 ```shell
-go get github.com/yam8511/go-onnxruntime@v1.1.0
+go get github.com/yam8511/go-onnxruntime@v1.3.0
 ```
 
 ## YOLOv8 Object Detection

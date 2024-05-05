@@ -88,14 +88,35 @@ func (sess *Session_SEG) predict(img gocv.Mat, threshold float32) (
 	preP = time.Since(now)
 
 	now = time.Now()
-	output0, output1, err := sess.run_model(input)
+	outputs, err := sess.run_model(input)
 	if err != nil {
 		return nil, err
 	}
 	inferP = time.Since(now)
+	defer func() {
+		for _, output := range outputs {
+			output.Destroy()
+		}
+	}()
+
+	ptr0, err := outputs[0].GetTensorMutableData()
+	if err != nil {
+		return nil, err
+	}
+
+	ptr1, err := outputs[1].GetTensorMutableData()
+	if err != nil {
+		return nil, err
+	}
+
+	sizes0 := outputs[0].GetShape().Sizes()
+	output0 := gocv.NewMatWithSizesFromPtr([]int{sizes0[1], sizes0[2]}, gocv.MatTypeCV32F, ptr0)
+
+	sizes1 := outputs[1].GetShape().Sizes()
+	output1 := gocv.NewMatWithSizesFromPtr([]int{sizes1[1], sizes1[2], sizes1[3]}, gocv.MatTypeCV32F, ptr1)
 
 	now = time.Now()
-	objs, err := sess.process_output(output0, output1, &img, xFactor, yFactor, threshold)
+	objs, err := sess.process_output(&output0, &output1, &img, xFactor, yFactor, threshold)
 	if err != nil {
 		return nil, err
 	}
@@ -139,52 +160,39 @@ func (sess *Session_SEG) prepare_input(img gocv.Mat) ([]float32, float32, float3
 }
 
 func (sess *Session_SEG) run_model(input []float32) (
-	*gocv.Mat, *gocv.Mat, error,
+	[2]*ort.Tensor[float32], error,
 ) {
+	ret := [2]*ort.Tensor[float32]{}
 	inputTensor, err := ort.NewInputTensor(sess.session, "", input)
 	if err != nil {
-		return nil, nil, err
+		return ret, err
 	}
 	defer inputTensor.Destroy()
 
 	output0Tensor, err := ort.NewEmptyOutputTensor[float32](sess.session, "output0")
 	if err != nil {
-		return nil, nil, err
+		return ret, err
 	}
-	defer output0Tensor.Destroy()
 	output1Tensor, err := ort.NewEmptyOutputTensor[float32](sess.session, "output1")
 	if err != nil {
-		return nil, nil, err
+		output0Tensor.Destroy()
+		return ret, err
 	}
-	defer output1Tensor.Destroy()
 
 	err = sess.session.RunDefault(
 		[]ort.AnyTensor{inputTensor},
 		[]ort.AnyTensor{output0Tensor, output1Tensor},
 	)
 	if err != nil {
-		return nil, nil, err
+		output0Tensor.Destroy()
+		output1Tensor.Destroy()
+		return ret, err
 	}
 
-	ptr0, err := output0Tensor.GetTensorMutableData()
-	if err != nil {
-		return nil, nil, err
-	}
+	ret[0] = output0Tensor
+	ret[1] = output1Tensor
 
-	ptr1, err := output1Tensor.GetTensorMutableData()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	sizes0 := output0Tensor.GetShape().Sizes()
-	mat0 := gocv.NewMatWithSizesFromPtr([]int{sizes0[1], sizes0[2]}, gocv.MatTypeCV32F, ptr0)
-	// mat0 := gocv.NewMatWithSizeAndPtr([]int{sizes0[1], sizes0[2]}, gocv.MatTypeCV32F, ptr0)
-
-	sizes1 := output1Tensor.GetShape().Sizes()
-	mat1 := gocv.NewMatWithSizesFromPtr([]int{sizes1[1], sizes1[2], sizes1[3]}, gocv.MatTypeCV32F, ptr1)
-	// mat1 := gocv.NewMatWithSizeAndPtr([]int{sizes1[1], sizes1[2], sizes1[3]}, gocv.MatTypeCV32F, ptr1)
-
-	return &mat0, &mat1, nil
+	return ret, nil
 }
 
 func (sess *Session_SEG) process_output(_output0, output1, img *gocv.Mat, xFactor, yFactor, accu_thresh float32) (
@@ -268,6 +276,7 @@ func (sess *Session_SEG) process_output(_output0, output1, img *gocv.Mat, xFacto
 			col.Close()
 
 			mask_reshape := mask.Reshape(mask.Channels(), maskHeight)
+			mask.Close()
 
 			gocv.Resize(mask_reshape, &mask_reshape, image.Pt(imageWidth, imageHeight), 0, 0, gocv.InterpolationDefault)
 
